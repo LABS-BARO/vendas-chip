@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foguete OXXO — Consulte sua posição</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+  :root{
+    --bg-deep:#05060f;
+    --bg-panel:#10152c;
+    --bg-panel-alt:#161c38;
+    --oxxo-red:#e4032a;
+    --oxxo-red-dark:#8f021c;
+    --oxxo-gold:#ffc72c;
+    --flame:#ff6b35;
+    --text:#f5f6fa;
+    --text-muted:#8a90ac;
+    --green:#2fae72;
+    --border: rgba(255,255,255,0.09);
+    --card-light:#fffdf7;
+    --card-light-alt:#fbf1d8;
+    --text-dark:#241608;
+    --text-dark-muted:#7a6a4a;
+    --border-light: rgba(36,22,8,0.1);
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  html,body{
+    background:var(--bg-deep);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100%;
+    overflow-x:hidden;
+  }
+
+  #app{ position:relative; }
+
+  /* ---------- starfield ---------- */
+  #stars, #stars2{
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    pointer-events:none; z-index:0;
+  }
+  .star{ position:absolute; background:#fff; border-radius:50%; opacity:.8; }
+
+  /* ---------- layout shell ---------- */
+  .wrap{ position:relative; z-index:1; max-width:960px; margin:0 auto; padding:0 20px 80px; }
+
+  /* ---------- header ---------- */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:22px 0 10px;
+  }
+  .badge{
+    display:inline-flex; align-items:center; gap:8px;
+    background:var(--bg-panel); border:1px solid var(--border);
+    padding:8px 14px; border-radius:999px; font-size:12px; font-weight:700;
+    letter-spacing:.06em; color:var(--text-muted);
+  }
+  .oxxo-mark{
+    font-family:'Anton',sans-serif; font-size:15px; letter-spacing:.04em;
+    background:var(--oxxo-red); color:var(--oxxo-gold);
+    border:2px solid var(--oxxo-gold); border-radius:6px;
+    padding:2px 8px;
+  }
+
+  /* ---------- update bar ---------- */
+  .update-bar{
+    margin-top:10px; display:flex; align-items:center; justify-content:space-between;
+    gap:14px; flex-wrap:wrap; background:var(--bg-panel); border:1px solid var(--border);
+    border-radius:14px; padding:12px 16px;
+  }
+  .update-bar-info{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .update-dot{
+    width:9px; height:9px; border-radius:50%; background:var(--text-muted); flex-shrink:0;
+  }
+  .update-dot.fresh{ background:var(--green); box-shadow:0 0 8px var(--green); }
+  .update-label{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); }
+  .update-value{ font-size:13px; font-weight:700; color:var(--text); }
+  .update-bar .btn{ padding:10px 16px; font-size:13px; flex-shrink:0; }
+
+  .fab-upload{
+    display:none;
+  }
+  @media (max-width:640px){
+    .fab-upload{
+      display:flex; align-items:center; justify-content:center;
+      position:fixed; right:18px; bottom:18px; width:54px; height:54px; border-radius:50%;
+      background:var(--oxxo-red); color:#fff; border:none; font-size:22px; cursor:pointer;
+      box-shadow:0 10px 24px rgba(228,3,42,.45); z-index:40;
+    }
+  }
+
+  /* ---------- hero ---------- */
+  .hero{ text-align:center; padding:34px 0 20px; }
+  .eyebrow{
+    font-size:13px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--oxxo-gold); margin-bottom:10px;
+  }
+  h1.title{
+    font-family:'Anton',sans-serif; font-weight:400;
+    font-size:clamp(40px,9vw,74px); line-height:.95; letter-spacing:.01em;
+    background:linear-gradient(180deg,#fff 0%, var(--oxxo-gold) 70%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow: 0 0 40px rgba(255,199,44,.15);
+  }
+  .title small{
+    display:block; font-family:'Anton',sans-serif;
+    font-size:clamp(20px,4.2vw,30px); letter-spacing:.06em;
+    color:var(--text); -webkit-text-fill-color:var(--text);
+    margin-top:4px;
+  }
+  .tagline{
+    margin-top:16px; font-size:15px; color:var(--text-muted);
+    max-width:520px; margin-left:auto; margin-right:auto; line-height:1.6;
+  }
+  .tagline strong{ color:var(--oxxo-gold); font-weight:700; }
+
+  /* ---------- hero scene (lua + foguete + loja OXXO) ---------- */
+  .hero-scene{ max-width:640px; margin:26px auto 0; }
+  .hero-scene svg{ width:100%; height:auto; display:block; filter:drop-shadow(0 10px 30px rgba(228,3,42,.15)); }
+  .rocket-anim{ animation:rocketFloat 3.2s ease-in-out infinite; transform-origin:center; }
+  .flame{ animation:flicker 0.18s ease-in-out infinite alternate; transform-origin:center; }
+  @keyframes rocketFloat{
+    0%,100%{ transform:translate(560px,90px) rotate(28deg); }
+    50%{ transform:translate(566px,82px) rotate(28deg); }
+  }
+  @keyframes flicker{ from{ transform:scaleY(1); opacity:1; } to{ transform:scaleY(1.18); opacity:.85; } }
+
+  .hype-ribbon{
+    display:inline-block; margin:6px 0 14px; padding:8px 18px; border-radius:999px;
+    background:repeating-linear-gradient(135deg, var(--oxxo-red), var(--oxxo-red) 10px, var(--oxxo-red-dark) 10px, var(--oxxo-red-dark) 20px);
+    color:#fff; font-weight:800; font-size:12.5px; letter-spacing:.03em;
+    box-shadow:0 8px 24px -8px rgba(228,3,42,.7);
+    animation:pulseRibbon 1.8s ease-in-out infinite;
+  }
+  @keyframes pulseRibbon{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.035); } }
+
+  .hype-grid{
+    display:grid; grid-template-columns:1fr 1.4fr; gap:12px; margin-top:26px;
+    text-align:left;
+  }
+  .hype-card{
+    display:flex; align-items:center; gap:12px; background:var(--bg-panel);
+    border:1px solid var(--border); border-radius:16px; padding:16px;
+    position:relative; overflow:hidden;
+  }
+  .hype-card::before{
+    content:''; position:absolute; top:0; left:0; width:5px; height:100%;
+    background:linear-gradient(180deg, var(--oxxo-gold), var(--oxxo-red));
+  }
+  .hype-icon{ font-size:26px; flex-shrink:0; }
+  .hype-body{ min-width:0; }
+  .hype-label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); font-weight:700; }
+  .hype-value{ font-family:'Anton',sans-serif; font-size:19px; color:var(--oxxo-gold); margin-top:2px; letter-spacing:.01em; }
+  .hype-sub{ font-size:11px; color:var(--text-muted); margin-top:6px; }
+  .thermo-track{
+    margin-top:8px; height:12px; border-radius:999px; background:var(--bg-deep);
+    border:1px solid var(--border); overflow:hidden;
+  }
+  .thermo-fill{
+    height:100%; border-radius:999px; background:linear-gradient(90deg, var(--oxxo-red), var(--flame), var(--oxxo-gold));
+    transition:width .6s ease; position:relative;
+  }
+
+  @media (max-width:560px){
+    .hype-grid{ grid-template-columns:1fr; }
+  }
+
+  /* ---------- search console ---------- */
+  .console{
+    margin:34px 0 8px; background:var(--bg-panel);
+    border:1px solid var(--border); border-radius:20px; padding:22px;
+    box-shadow:0 20px 60px -20px rgba(228,3,42,.25);
+  }
+  .console-label{
+    font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--text-muted); margin-bottom:10px;
+  }
+  .search-row{ display:flex; gap:10px; }
+  .search-row input{
+    flex:1; background:var(--bg-deep); border:1px solid var(--border);
+    color:var(--text); font-family:'Inter'; font-size:16px; font-weight:600;
+    padding:14px 16px; border-radius:12px; outline:none;
+  }
+  .search-row input:focus{ border-color:var(--oxxo-gold); }
+  .btn{
+    border:none; cursor:pointer; font-family:'Inter'; font-weight:800;
+    font-size:14px; letter-spacing:.03em; border-radius:12px; padding:14px 22px;
+    background:var(--oxxo-red); color:#fff; transition:transform .15s ease, filter .15s ease;
+    white-space:nowrap;
+  }
+  .btn:hover{ filter:brightness(1.1); transform:translateY(-1px); }
+  .btn.gold{ background:var(--oxxo-gold); color:#1a1200; }
+  .btn.ghost{ background:transparent; border:1px solid var(--border); color:var(--text-muted); }
+  .hint{ margin-top:10px; font-size:12px; color:var(--text-muted); }
+
+  /* ---------- result card ---------- */
+  .result{
+    margin-top:18px; background:var(--bg-panel-alt); border:1px solid var(--border);
+    border-radius:18px; padding:22px; display:none;
+  }
+  .result.show{ display:block; animation:rise .4s ease; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+  .result-top{ display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .result-name{ font-size:20px; font-weight:800; }
+  .result-loja{ font-size:13px; color:var(--text-muted); margin-top:2px; }
+  .rank-pill{
+    font-family:'Anton',sans-serif; font-size:26px; letter-spacing:.02em;
+    color:var(--oxxo-gold); background:var(--bg-deep); border:1px solid var(--border);
+    border-radius:12px; padding:6px 16px; text-align:center; min-width:80px;
+  }
+  .rank-pill span{ display:block; font-family:'Inter'; font-size:10px; font-weight:700;
+    letter-spacing:.1em; color:var(--text-muted); text-transform:uppercase; }
+
+  .status-row{ display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
+  .chip-stat{
+    background:var(--bg-deep); border:1px solid var(--border); border-radius:12px;
+    padding:10px 14px; flex:1; min-width:130px;
+  }
+  .chip-stat .num{ font-family:'Anton',sans-serif; font-size:22px; color:#fff; }
+  .chip-stat .lbl{ font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; margin-top:2px;}
+
+  .status-tag{
+    display:inline-flex; align-items:center; gap:6px; margin-top:14px;
+    font-size:13px; font-weight:700; padding:8px 14px; border-radius:999px;
+  }
+  .status-tag.ok{ background:rgba(62,207,142,.12); color:var(--green); border:1px solid rgba(62,207,142,.3); }
+  .status-tag.warn{ background:rgba(255,107,53,.12); color:var(--flame); border:1px solid rgba(255,107,53,.3); }
+
+  /* rocket trajectory gauge */
+  .gauge{ margin-top:18px; }
+  .gauge-labels{ display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-bottom:6px; }
+  .gauge-track{
+    position:relative; height:10px; border-radius:999px; background:var(--bg-deep);
+    border:1px solid var(--border); overflow:visible;
+  }
+  .gauge-fill{
+    position:absolute; left:0; top:0; height:100%; border-radius:999px;
+    background:linear-gradient(90deg, var(--oxxo-red), var(--flame), var(--oxxo-gold));
+    transition:width .6s ease;
+  }
+  .gauge-threshold{
+    position:absolute; top:-6px; width:2px; height:22px; background:rgba(255,255,255,.5);
+  }
+  .gauge-threshold::after{
+    content:'meta 105'; position:absolute; top:-18px; left:50%; transform:translateX(-50%);
+    font-size:9px; color:var(--text-muted); white-space:nowrap;
+  }
+  .gauge-rocket{
+    position:absolute; top:-13px; transform:translateX(-50%); font-size:20px;
+    transition:left .6s ease; filter:drop-shadow(0 0 6px var(--flame));
+  }
+
+  .no-result{ display:none; margin-top:14px; font-size:13px; color:var(--text-muted); text-align:center; }
+  .no-result.show{ display:block; }
+
+  /* ---------- section headers ---------- */
+  .sec-head{ display:flex; align-items:baseline; justify-content:space-between; margin:48px 0 18px; }
+  .sec-title{ font-family:'Anton',sans-serif; font-size:26px; letter-spacing:.02em; }
+  .sec-sub{ font-size:12px; color:var(--text-muted); }
+
+  /* ---------- light brand panel (matches campaign artwork) ---------- */
+  .panel{
+    background:var(--card-light); border-radius:18px; overflow:hidden;
+    box-shadow:0 20px 50px -25px rgba(0,0,0,.6);
+    border:1px solid rgba(0,0,0,.06);
+  }
+  .panel-head{
+    display:flex; align-items:center; gap:8px;
+    background:linear-gradient(135deg, var(--oxxo-red), var(--oxxo-red-dark));
+    color:#fff; padding:14px 18px; font-weight:800; font-size:14px;
+    letter-spacing:.03em; text-transform:uppercase;
+  }
+  .panel-head .icon{ font-size:16px; }
+  .panel-head .sub{
+    margin-left:auto; font-size:11px; font-weight:700; text-transform:none;
+    background:rgba(255,255,255,.18); padding:4px 10px; border-radius:999px;
+  }
+  .panel-body{ padding:10px; }
+
+  /* ---------- podium ---------- */
+  .podium{ display:flex; flex-direction:column; gap:8px; }
+  .pod-card{
+    display:flex; align-items:center; gap:14px; background:var(--card-light);
+    border:1px solid var(--border-light); border-radius:12px; padding:12px 14px;
+    position:relative;
+  }
+  .pod-card:nth-child(even){ background:var(--card-light-alt); }
+  .pod-card.p1{ border-color:var(--oxxo-gold); box-shadow:0 0 0 1px var(--oxxo-gold) inset; }
+  .medal{
+    font-family:'Anton',sans-serif; font-size:19px; width:36px; height:36px;
+    display:flex; align-items:center; justify-content:center; border-radius:50%;
+    flex-shrink:0; color:#241608; box-shadow:0 2px 6px rgba(0,0,0,.25);
+  }
+  .medal.m1{ background:linear-gradient(160deg,#ffe58a,#ffc72c); }
+  .medal.m2{ background:linear-gradient(160deg,#f1f3f6,#c3c9d4); }
+  .medal.m3{ background:linear-gradient(160deg,#e3a26b,#b9713a); color:#2a1500; }
+  .medal.m4, .medal.m5{ background:linear-gradient(160deg, var(--oxxo-red), var(--oxxo-red-dark)); color:#fff; }
+  .pod-info{ flex:1; min-width:0; }
+  .pod-name{ font-weight:800; font-size:15px; color:var(--text-dark); }
+  .pod-loja{ font-size:12px; color:var(--text-dark-muted); }
+  .pod-chips{ text-align:right; }
+  .pod-chips .num{ font-family:'Anton',sans-serif; font-size:20px; color:var(--oxxo-red); }
+  .pod-chips .lbl{ font-size:10px; color:var(--text-dark-muted); text-transform:uppercase; }
+  .prize-tag{
+    font-size:11px; font-weight:800; color:#fff; margin-top:3px;
+    background:var(--oxxo-red); border-radius:6px; padding:2px 8px; display:inline-block;
+  }
+
+  /* ---------- table ---------- */
+  .table-wrap{ background:var(--card-light); overflow:hidden; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  thead th{
+    text-align:left; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:#fff; background:var(--oxxo-red-dark); padding:12px 16px;
+  }
+  tbody td{ padding:12px 16px; border-bottom:1px solid var(--border-light); color:var(--text-dark); font-weight:500; }
+  tbody tr:nth-child(even){ background:var(--card-light-alt); }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr.me{ background:var(--oxxo-gold) !important; }
+  tbody tr.me td{ color:#241608; font-weight:800; }
+  .rank-cell{ width:40px; }
+  .rank-badge{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:24px; height:24px; border-radius:50%; font-family:'Anton',sans-serif;
+    font-size:12px; background:var(--oxxo-red); color:#fff;
+  }
+  tr.me .rank-badge{ background:#241608; color:var(--oxxo-gold); }
+  .status-pill{
+    display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:800;
+    padding:4px 10px; border-radius:999px;
+  }
+  .status-pill.ok{ background:rgba(47,174,114,.15); color:#1c7a4d; }
+  .status-pill.warn{ background:rgba(228,3,42,.1); color:var(--oxxo-red); }
+  tr.me .status-pill.ok{ background:rgba(28,122,77,.18); }
+  tr.me .status-pill.warn{ background:rgba(228,3,42,.18); }
+  .empty-state{ text-align:center; padding:50px 20px; color:var(--text-dark-muted); font-size:13px; }
+  .empty-state .big{ font-family:'Anton',sans-serif; font-size:20px; color:var(--text-dark); margin-bottom:8px; display:block;}
+
+  /* ---------- footer / rules ---------- */
+  footer{ margin-top:60px; text-align:center; }
+  .rules{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;
+    margin-top:16px; text-align:left;
+  }
+  .rule-card{ background:var(--bg-panel); border:1px solid var(--border); border-radius:14px; padding:16px; }
+  .rule-card .k{ color:var(--oxxo-gold); font-weight:800; font-size:13px; margin-bottom:4px;}
+  .rule-card .v{ color:var(--text-muted); font-size:12px; line-height:1.5; }
+  .updated{ margin-top:30px; font-size:11px; color:var(--text-muted); }
+  .admin-link{
+    margin-top:6px; background:none; border:none; color:var(--text-muted);
+    font-size:11px; text-decoration:underline; cursor:pointer; opacity:.7;
+  }
+
+  /* ---------- admin modal ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(2,3,10,.75); backdrop-filter:blur(4px);
+    display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .overlay.show{ display:flex; }
+  .modal{
+    background:var(--bg-panel-alt); border:1px solid var(--border); border-radius:18px;
+    padding:26px; max-width:460px; width:100%; max-height:86vh; overflow:auto;
+  }
+  .modal h3{ font-family:'Anton',sans-serif; font-size:20px; margin-bottom:4px; }
+  .modal p.desc{ font-size:12px; color:var(--text-muted); margin-bottom:16px; line-height:1.5; }
+  .modal label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); display:block; margin:14px 0 6px; }
+  .modal input[type=password]{
+    width:100%; background:var(--bg-deep); border:1px solid var(--border); border-radius:10px;
+    padding:12px; color:var(--text); font-size:14px;
+  }
+  .drop{
+    margin-top:6px; border:1.5px dashed var(--border); border-radius:12px; padding:24px;
+    text-align:center; font-size:12px; color:var(--text-muted); cursor:pointer;
+  }
+  .drop:hover{ border-color:var(--oxxo-gold); color:var(--text); }
+  .drop input{ display:none; }
+  .modal-actions{ display:flex; gap:8px; margin-top:18px; }
+  .modal-msg{ font-size:12px; margin-top:10px; min-height:16px; }
+  .modal-msg.ok{ color:var(--green); }
+  .modal-msg.err{ color:var(--oxxo-red); }
+  .close-x{ float:right; background:none; border:none; color:var(--text-muted); font-size:18px; cursor:pointer; }
+  .preview-table{ margin-top:12px; max-height:160px; overflow:auto; border:1px solid var(--border); border-radius:10px; }
+  .preview-table table{ font-size:11px; }
+
+  @media (max-width:520px){
+    .rank-pill{ min-width:64px; font-size:20px; }
+    .search-row{ flex-direction:column; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stars"></div>
+  <div class="wrap">
+
+    <header>
+      <span class="badge"><span class="oxxo-mark">OXXO</span> × Claro flex</span>
+      <span class="badge">3 meses de campanha</span>
+    </header>
+
+    <div class="update-bar">
+      <div class="update-bar-info">
+        <span class="update-dot" id="updateDot"></span>
+        <div>
+          <div class="update-label">Última atualização da base</div>
+          <div class="update-value" id="updatedAtTop">Nenhum dado importado ainda</div>
+        </div>
+      </div>
+      <button class="btn gold" id="openAdminTop">📤 Atualizar dados</button>
+    </div>
+
+    <section class="hero">
+      <div class="eyebrow">Campanha</div>
+      <div class="hype-ribbon">🔥 QUEM VENDE MAIS, GANHA MAIS — TOP 5 LEVA R$ 2.000,00</div>
+      <h1 class="title">FOGUETE OXXO<small>Vendeu, liderou, ganhou!</small></h1>
+      <p class="tagline">Consulte sua posição no ranking de vendas de chips. A meta é individual: <strong>105 chips em 3 meses (35 por mês)</strong>. Quem bater a meta e não deixar nenhuma loja da carteira zerada concorre ao <strong>Top 5</strong> — R$ 2.000 para cada colocação.</p>
+
+      <div class="hero-scene">
+        <svg viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Foguete OXXO decolando da Lua">
+          <defs>
+            <radialGradient id="earthGrad" cx="35%" cy="35%" r="70%">
+              <stop offset="0%" stop-color="#7fd6e0"/>
+              <stop offset="45%" stop-color="#2f8fd1"/>
+              <stop offset="100%" stop-color="#0f3f7a"/>
+            </radialGradient>
+            <linearGradient id="moonGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#565c72"/>
+              <stop offset="100%" stop-color="#2a2e3d"/>
+            </linearGradient>
+            <linearGradient id="flameGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fff3c4"/>
+              <stop offset="45%" stop-color="#ffc72c"/>
+              <stop offset="100%" stop-color="#e4032a"/>
+            </linearGradient>
+            <linearGradient id="rocketBody" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#d8dce6"/>
+              <stop offset="100%" stop-color="#ffffff"/>
+            </linearGradient>
+          </defs>
+
+          <!-- earth -->
+          <circle cx="82" cy="58" r="60" fill="url(#earthGrad)"/>
+          <path d="M40 30 Q70 20 95 35 Q75 45 40 30Z" fill="#ffffff" opacity=".35"/>
+          <path d="M55 75 Q90 65 120 80 Q95 92 55 75Z" fill="#ffffff" opacity=".28"/>
+
+          <!-- smoke trail -->
+          <g opacity=".55">
+            <ellipse cx="470" cy="230" rx="26" ry="16" fill="#cfd3de"/>
+            <ellipse cx="500" cy="205" rx="22" ry="14" fill="#b9bdca"/>
+            <ellipse cx="522" cy="178" rx="18" ry="12" fill="#cfd3de"/>
+            <ellipse cx="540" cy="152" rx="14" ry="10" fill="#b9bdca"/>
+          </g>
+
+          <!-- rocket -->
+          <g class="rocket-anim" transform="translate(560,90) rotate(28)">
+            <ellipse cx="0" cy="46" rx="10" ry="20" fill="url(#flameGrad)" class="flame"/>
+            <rect x="-13" y="-46" width="26" height="70" rx="13" fill="url(#rocketBody)"/>
+            <path d="M-13 -20 L0 -58 L13 -20 Z" fill="#e4032a"/>
+            <circle cx="0" cy="-6" r="8" fill="#2f8fd1" stroke="#c8ccd6" stroke-width="2"/>
+            <path d="M-13 10 L-27 34 L-13 30 Z" fill="#e4032a"/>
+            <path d="M13 10 L27 34 L13 30 Z" fill="#e4032a"/>
+            <rect x="-10" y="-2" width="20" height="9" fill="#ffc72c"/>
+          </g>
+
+          <!-- moon surface -->
+          <path d="M0 240 Q60 220 130 232 Q220 248 320 230 Q430 210 540 232 Q650 252 800 228 L800 300 L0 300 Z" fill="url(#moonGrad)"/>
+          <ellipse cx="110" cy="252" rx="30" ry="8" fill="#3a3f52" opacity=".7"/>
+          <ellipse cx="640" cy="258" rx="40" ry="9" fill="#3a3f52" opacity=".6"/>
+          <ellipse cx="380" cy="244" rx="22" ry="6" fill="#474d63" opacity=".6"/>
+
+          <!-- OXXO flag -->
+          <g transform="translate(150,150)">
+            <rect x="-2" y="0" width="4" height="82" fill="#8a90ac"/>
+            <path d="M2 6 L2 44 L58 44 Q66 25 58 6 Z" fill="#e4032a"/>
+            <rect x="10" y="16" width="40" height="18" rx="3" fill="#ffffff"/>
+            <text x="30" y="29" text-anchor="middle" font-family="Anton, sans-serif" font-size="12" fill="#e4032a">OXXO</text>
+          </g>
+
+          <!-- OXXO storefront -->
+          <g transform="translate(600,168)">
+            <rect x="0" y="26" width="150" height="58" fill="#3a1a10"/>
+            <rect x="0" y="14" width="150" height="18" fill="#e4032a"/>
+            <rect x="0" y="14" width="150" height="18" fill="url(#flameGrad)" opacity=".12"/>
+            <rect x="14" y="4" width="122" height="20" rx="4" fill="#ffffff"/>
+            <rect x="20" y="8" width="110" height="12" rx="2" fill="#e4032a"/>
+            <text x="75" y="18" text-anchor="middle" font-family="Anton, sans-serif" font-size="11" fill="#ffc72c">OXXO</text>
+            <rect x="10" y="36" width="42" height="40" fill="#ffe9a8" opacity=".85"/>
+            <rect x="98" y="36" width="42" height="40" fill="#ffe9a8" opacity=".85"/>
+            <rect x="60" y="46" width="30" height="38" fill="#241608"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="hype-grid">
+        <div class="hype-card">
+          <div class="hype-icon">⏳</div>
+          <div class="hype-body" style="width:100%;">
+            <div class="hype-label">Tempo de campanha</div>
+            <div class="hype-value" id="countdownValue">Defina a data de início no painel do admin</div>
+            <div class="thermo-track"><div class="thermo-fill" id="daysFill" style="width:0%"></div></div>
+            <div class="hype-sub" id="daysSub"></div>
+          </div>
+        </div>
+        <div class="hype-card">
+          <div class="hype-icon">🎯</div>
+          <div class="hype-body" style="width:100%;">
+            <div class="hype-label">Meta individual · 105 chips em 3 meses (35/mês)</div>
+            <div class="hype-value" id="thermoValue">0 de 0 CLs na meta</div>
+            <div class="thermo-track"><div class="thermo-fill" id="thermoFill" style="width:0%"></div></div>
+            <div class="hype-sub" id="thermoSub">Assim que a planilha for importada, mostramos aqui quantos CLs já bateram a meta.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="console">
+      <div class="console-label">Consulte sua posição</div>
+      <div class="search-row">
+        <input id="searchInput" type="text" placeholder="Digite seu nome (CL)..." autocomplete="off">
+        <button class="btn gold" id="searchBtn">🚀 Consultar</button>
+      </div>
+      <div class="hint" id="totalHint">Carregando dados da campanha...</div>
+
+      <div class="result" id="resultCard">
+        <div class="result-top">
+          <div>
+            <div class="result-name" id="rName">—</div>
+            <div class="result-loja" id="rLoja">—</div>
+          </div>
+          <div class="rank-pill"><span>Posição</span><span id="rRank">—</span></div>
+        </div>
+
+        <div class="status-row">
+          <div class="chip-stat"><div class="num" id="rChips">0</div><div class="lbl">Chips vendidos</div></div>
+          <div class="chip-stat"><div class="num" id="rGap">—</div><div class="lbl">Faltam p/ Top 5</div></div>
+        </div>
+
+        <div id="rStatusTag"></div>
+
+        <div class="gauge">
+          <div class="gauge-labels"><span>Base de lançamento</span><span id="gaugeMax">Líder</span></div>
+          <div class="gauge-track" id="gaugeTrack">
+            <div class="gauge-fill" id="gaugeFill" style="width:0%"></div>
+            <div class="gauge-threshold" id="gaugeThreshold"></div>
+            <div class="gauge-rocket" id="gaugeRocket" style="left:0%">🚀</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="no-result" id="noResult">Não encontramos esse nome na planilha atual. Confira a grafia ou fale com seu gestor.</div>
+    </div>
+
+    <div class="sec-head" style="margin-bottom:14px;">
+      <div class="sec-title">Ranking da campanha</div>
+    </div>
+
+    <div class="panel" style="margin-bottom:22px;">
+      <div class="panel-head"><span class="icon">🏆</span> Premiação — Top 5 <span class="sub">R$ 2.000 cada</span></div>
+      <div class="panel-body"><div class="podium" id="podium"></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span class="icon">📊</span> Ranking completo <span class="sub" id="tableCount">0 CLs</span></div>
+      <div class="table-wrap" id="tableWrap">
+        <div class="empty-state"><span class="big">Nenhum dado importado ainda</span>Assim que a planilha da campanha for carregada, o ranking aparece aqui.</div>
+      </div>
+    </div>
+
+    <footer>
+      <div class="sec-title" style="text-align:left">Como decolar</div>
+      <div class="rules">
+        <div class="rule-card"><div class="k">Duração</div><div class="v">3 meses de campanha</div></div>
+        <div class="rule-card"><div class="k">Elegibilidade</div><div class="v">Mínimo 35 chips vendidos e nenhuma loja da carteira sem vendas</div></div>
+        <div class="rule-card"><div class="k">Premiação</div><div class="v">Top 1 ao Top 5 — R$ 2.000,00 cada</div></div>
+        <div class="rule-card"><div class="k">Foco</div><div class="v">Ativar toda a carteira, loja por loja</div></div>
+      </div>
+      <div class="updated" id="updatedAt">—</div>
+      <button class="admin-link" id="openAdmin">Área do admin</button>
+    </footer>
+
+    <!-- botão flutuante de atalho para atualizar dados -->
+    <button class="fab-upload" id="openAdminFab" title="Atualizar dados">📤</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <button class="close-x" id="closeAdmin">✕</button>
+    <h3>Área do admin</h3>
+    <p class="desc">Importe a planilha (.csv ou .xlsx) do relatório de vendas — com as colunas <strong>CONSULTOR</strong>, <strong>DS_LOJA</strong> e <strong>Volume</strong> (e <strong>NOME_MES</strong>/<strong>ANO</strong> para filtrar pelo período da campanha). Cada linha pode ser uma loja diferente do mesmo CL — o site soma tudo automaticamente.</p>
+
+    <div id="pinGate">
+      <label>PIN de acesso</label>
+      <input type="password" id="pinInput" placeholder="••••">
+      <div class="modal-actions">
+        <button class="btn" id="pinBtn">Entrar</button>
+        <button class="btn ghost" id="pinCancel">Cancelar</button>
+      </div>
+      <div class="modal-msg err" id="pinMsg"></div>
+    </div>
+
+    <div id="uploadGate" style="display:none;">
+      <label>Planilha da campanha</label>
+      <div class="drop" id="dropZone">
+        📄 Clique ou arraste o arquivo .csv / .xlsx aqui
+        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+      </div>
+      <div id="previewArea"></div>
+      <div class="modal-actions">
+        <button class="btn gold" id="confirmUpload" disabled>Substituir dados atuais</button>
+        <button class="btn ghost" id="closeAdmin2">Fechar</button>
+      </div>
+      <div class="modal-msg" id="uploadMsg"></div>
+
+      <hr style="border-color:var(--border); margin:20px 0;">
+      <label>🚀 Data de início da campanha</label>
+      <input type="date" id="startDateInput" style="width:100%;background:var(--bg-deep);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);font-size:14px;">
+      <div class="hint" style="margin-top:6px;">A campanha dura 3 meses fixos — o fim é calculado automaticamente a partir da data de início.</div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="saveSettings">Salvar prazo</button>
+      </div>
+      <div class="modal-msg" id="settingsMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+  const ADMIN_PIN = "2026"; // PIN simples de acesso ao painel — combine com o time
+  const MIN_CHIPS = 105;
+  const MONTHLY_PACE = 35;
+  const TOP_N = 5;
+  const PRIZE = "R$ 2.000,00";
+  const DEFAULT_START_DATE = "2026-08-01"; // campanha já começou em 01/08
+
+  let ranking = [];      // computed & sorted array
+  let lastUpdated = null;
+  let pendingParsed = null; // parsed rows waiting confirmation
+  let campaignStart = null;
+
+  // ---------- stars ----------
+  function initStars(){
+    const el = document.getElementById('stars');
+    let html = '';
+    for(let i=0;i<140;i++){
+      const size = Math.random()<0.85 ? 1+Math.random()*1.4 : 2+Math.random()*1.6;
+      const top = Math.random()*100, left = Math.random()*100;
+      const op = 0.25 + Math.random()*0.75;
+      const dur = 2+Math.random()*4;
+      html += `<div class="star" style="width:${size}px;height:${size}px;top:${top}%;left:${left}%;opacity:${op};animation:twinkle ${dur}s ease-in-out infinite alternate;"></div>`;
+    }
+    el.innerHTML = html;
+    const styleTag = document.createElement('style');
+    styleTag.textContent = `@keyframes twinkle{from{opacity:.2}to{opacity:1}}`;
+    document.head.appendChild(styleTag);
+  }
+
+  function normalize(s){
+    return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+  }
+
+  // ---------- storage (JSONBin.io — dado compartilhado entre todos os acessos) ----------
+  // 1. Crie uma conta grátis em https://jsonbin.io
+  // 2. Crie um bin novo com o conteúdo: {"entries":[],"updatedAt":null,"startDate":"2026-08-01"}
+  // 3. Copie o Bin ID (aparece na URL/dashboard) e cole em JSONBIN_BIN_ID abaixo.
+  // 4. Vá em "API Keys" no jsonbin.io, copie a "Master Key" (ou uma X-Access-Key com escopo
+  //    restrito a esse bin, mais seguro) e cole em JSONBIN_API_KEY abaixo.
+  const JSONBIN_BIN_ID = "6a728260f5f4af5e29ec11a2";
+  const JSONBIN_API_KEY = "$2a$10$VWz7dkETxxiCOgZ1CEnUGuuweKLv9ixmJkw10FRcJEHJyebr6xVCu";
+  const JSONBIN_BASE = "https://api.jsonbin.io/v3/b/" + JSONBIN_BIN_ID;
+
+  async function loadData(){
+    try{
+      const res = await fetch(JSONBIN_BASE + "/latest", {
+        headers: { "X-Master-Key": JSONBIN_API_KEY }
+      });
+      if(!res.ok) throw new Error('load failed');
+      const json = await res.json();
+      return json.record || null;
+    }catch(e){ /* not found yet or offline */ }
+    return null;
+  }
+
+  async function saveData(payload){
+    const res = await fetch(JSONBIN_BASE, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Master-Key": JSONBIN_API_KEY
+      },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) throw new Error('Falha ao salvar no JSONBin (verifique Bin ID / API Key).');
+  }
+
+  // ---------- ranking computation ----------
+  function computeRanking(entries){
+    // entries: [{nome, lojas:[{loja,chips}]}]
+    const withTotals = entries.map(e=>{
+      const total = e.lojas.reduce((s,l)=>s+l.chips,0);
+      const hasZeroStore = e.lojas.some(l=>l.chips<=0);
+      const eligible = total>=MIN_CHIPS && !hasZeroStore && e.lojas.length>0;
+      return {...e, total, hasZeroStore, eligible};
+    });
+    withTotals.sort((a,b)=> b.total - a.total);
+    withTotals.forEach((e,i)=> e.rank = i+1);
+    return withTotals;
+  }
+
+  // ---------- render ----------
+  function renderAll(){
+    renderHint();
+    renderPodium();
+    renderTable();
+    renderUpdated();
+    renderCountdown();
+    renderThermometer();
+  }
+
+  function renderCountdown(){
+    const el = document.getElementById('countdownValue');
+    const fillEl = document.getElementById('daysFill');
+    const subEl = document.getElementById('daysSub');
+    if(!campaignStart){
+      el.textContent = 'Defina a data de início no painel do admin';
+      fillEl.style.width = '0%';
+      subEl.textContent = '';
+      return;
+    }
+    const start = new Date(campaignStart + 'T00:00:00');
+    const end = new Date(start);
+    end.setMonth(end.getMonth()+3);
+    end.setHours(23,59,59);
+
+    const MS_DAY = 1000*60*60*24;
+    const today = new Date();
+    const totalDays = Math.round((end - start) / MS_DAY);
+    const dayNumber = Math.floor((today - start) / MS_DAY) + 1;
+    const endLabel = end.toLocaleDateString('pt-BR');
+    const startLabel = start.toLocaleDateString('pt-BR');
+
+    if(dayNumber < 1){
+      el.textContent = `Começa em ${startLabel}`;
+      fillEl.style.width = '0%';
+      subEl.textContent = `Campanha de ${totalDays} dias, até ${endLabel}.`;
+      return;
+    }
+    if(dayNumber > totalDays){
+      el.textContent = `Campanha encerrada`;
+      fillEl.style.width = '100%';
+      subEl.textContent = `Foi de ${startLabel} até ${endLabel}.`;
+      return;
+    }
+
+    const daysLeft = totalDays - dayNumber;
+    const pct = Math.min(100, (dayNumber/totalDays)*100);
+    el.textContent = `Dia ${dayNumber} de ${totalDays}`;
+    fillEl.style.width = pct+'%';
+    if(daysLeft > 1) subEl.textContent = `Faltam ${daysLeft} dias · encerra em ${endLabel} 🔥`;
+    else if(daysLeft === 1) subEl.textContent = `Último dia amanhã! Encerra em ${endLabel} ⏰`;
+    else subEl.textContent = `Último dia da campanha! ⏰`;
+  }
+
+  function renderThermometer(){
+    const valEl = document.getElementById('thermoValue');
+    const fillEl = document.getElementById('thermoFill');
+    const subEl = document.getElementById('thermoSub');
+    const totalCLs = ranking.length;
+    if(totalCLs===0){
+      valEl.textContent = '0 de 0 CLs na meta';
+      fillEl.style.width = '0%';
+      subEl.textContent = 'Assim que a planilha for importada, mostramos aqui quantos CLs já bateram a meta.';
+      return;
+    }
+    const eligibleCount = ranking.filter(e=>e.eligible).length;
+    const pct = Math.min(100, (eligibleCount/totalCLs)*100);
+    valEl.textContent = `${eligibleCount} de ${totalCLs} CLs na meta`;
+    fillEl.style.width = pct+'%';
+    if(pct>=100) subEl.textContent = '🎉 Todo o time bateu a meta individual! Sensacional!';
+    else if(pct>=70) subEl.textContent = 'Quase lá — a maioria do time já garantiu os 105 chips! 🚀';
+    else if(pct>=30) subEl.textContent = 'Time engajado! Segue o ritmo de 35 chips por mês. 💪';
+    else subEl.textContent = 'Lembrete: o ritmo ideal é 35 chips por mês para chegar aos 105.';
+  }
+
+  function fireConfetti(){
+    const colors = ['#e4032a','#ffc72c','#ffffff','#ff6b35'];
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden;';
+    document.body.appendChild(container);
+    for(let i=0;i<40;i++){
+      const piece = document.createElement('div');
+      const size = 6+Math.random()*6;
+      const left = Math.random()*100;
+      const color = colors[Math.floor(Math.random()*colors.length)];
+      const duration = 1.6+Math.random()*1.2;
+      const delay = Math.random()*0.3;
+      const rotate = Math.random()*360;
+      piece.style.cssText = `position:absolute;top:-20px;left:${left}%;width:${size}px;height:${size}px;background:${color};opacity:.9;transform:rotate(${rotate}deg);border-radius:${Math.random()<0.5?'50%':'2px'};animation:confettiFall ${duration}s ease-in ${delay}s forwards;`;
+      container.appendChild(piece);
+    }
+    if(!document.getElementById('confettiKeyframes')){
+      const style = document.createElement('style');
+      style.id = 'confettiKeyframes';
+      style.textContent = `@keyframes confettiFall{ to{ transform:translateY(100vh) rotate(540deg); opacity:.2; } }`;
+      document.head.appendChild(style);
+    }
+    setTimeout(()=> container.remove(), 3200);
+  }
+
+  function renderHint(){
+    const el = document.getElementById('totalHint');
+    if(ranking.length===0){
+      el.textContent = 'Nenhum dado importado ainda. Peça ao admin para carregar a planilha.';
+    } else {
+      el.textContent = `${ranking.length} CLs na campanha · digite seu nome para ver sua posição`;
+    }
+  }
+
+  function renderPodium(){
+    const el = document.getElementById('podium');
+    const top = ranking.slice(0,TOP_N);
+    if(top.length===0){
+      el.innerHTML = `<div class="table-wrap"><div class="empty-state"><span class="big">Pódio ainda não formado</span>Assim que houver vendas registradas, os 5 primeiros aparecem aqui.</div></div>`;
+      return;
+    }
+    el.innerHTML = top.map((e,i)=>{
+      const m = i+1;
+      return `<div class="pod-card p${m}">
+        <div class="medal m${m}">${m}</div>
+        <div class="pod-info">
+          <div class="pod-name">${escapeHtml(e.nome)}</div>
+          <div class="pod-loja">${escapeHtml(e.lojas.map(l=>l.loja).join(', '))}</div>
+        </div>
+        <div class="pod-chips">
+          <div class="num">${e.total}</div>
+          <div class="lbl">chips</div>
+          <div class="prize-tag">${PRIZE}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderTable(highlightName){
+    const wrap = document.getElementById('tableWrap');
+    document.getElementById('tableCount').textContent = ranking.length ? `${ranking.length} CLs` : '';
+    if(ranking.length===0){
+      wrap.innerHTML = `<div class="empty-state"><span class="big">Nenhum dado importado ainda</span>Assim que a planilha da campanha for carregada, o ranking aparece aqui.</div>`;
+      return;
+    }
+    const norm = normalize(highlightName);
+    const rows = ranking.map(e=>{
+      const isMe = norm && normalize(e.nome)===norm;
+      const pill = e.eligible
+        ? '<span class="status-pill ok">✅ Elegível</span>'
+        : '<span class="status-pill warn">⚠️ Não elegível</span>';
+      return `<tr class="${isMe?'me':''}">
+        <td class="rank-cell"><span class="rank-badge">${e.rank}</span></td>
+        <td>${escapeHtml(e.nome)}</td>
+        <td>${escapeHtml(e.lojas.map(l=>l.loja).join(', '))}</td>
+        <td><strong>${e.total}</strong></td>
+        <td>${pill}</td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `<table>
+      <thead><tr><th>#</th><th>CL</th><th>Loja(s)</th><th>Chips</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  function renderUpdated(){
+    const el = document.getElementById('updatedAt');
+    const top = document.getElementById('updatedAtTop');
+    const dot = document.getElementById('updateDot');
+    if(!lastUpdated){
+      el.textContent = 'Aguardando primeira importação de dados.';
+      top.textContent = 'Nenhum dado importado ainda';
+      dot.classList.remove('fresh');
+      return;
+    }
+    const d = new Date(lastUpdated);
+    const formatted = `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}`;
+    el.textContent = `Última atualização: ${formatted}`;
+    top.textContent = formatted;
+    dot.classList.add('fresh');
+  }
+
+  function escapeHtml(s){
+    return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---------- search ----------
+  function doSearch(){
+    const q = document.getElementById('searchInput').value;
+    const norm = normalize(q);
+    const card = document.getElementById('resultCard');
+    const noRes = document.getElementById('noResult');
+    if(!norm){ card.classList.remove('show'); noRes.classList.remove('show'); return; }
+
+    const found = ranking.find(e=> normalize(e.nome)===norm) ||
+                  ranking.find(e=> normalize(e.nome).includes(norm));
+
+    if(!found){
+      card.classList.remove('show');
+      noRes.classList.add('show');
+      renderTable();
+      return;
+    }
+    noRes.classList.remove('show');
+    card.classList.add('show');
+
+    document.getElementById('rName').textContent = found.nome;
+    document.getElementById('rLoja').textContent = found.lojas.map(l=>l.loja).join(', ');
+    document.getElementById('rRank').textContent = '#'+found.rank;
+    document.getElementById('rChips').textContent = found.total;
+
+    const gapEl = document.getElementById('rGap');
+    if(found.rank<=TOP_N){
+      gapEl.textContent = 'No Top 5! 🎉';
+    } else {
+      const cutoff = ranking[TOP_N-1] ? ranking[TOP_N-1].total : MIN_CHIPS;
+      const gap = Math.max(0, cutoff - found.total + 1);
+      gapEl.textContent = gap>0 ? `${gap} chips` : '—';
+    }
+
+    const tagEl = document.getElementById('rStatusTag');
+    if(found.rank<=TOP_N && found.eligible){
+      tagEl.innerHTML = `<span class="status-tag ok">🏆 Em posição de premiação</span>`;
+      fireConfetti();
+    } else if(!found.eligible && found.hasZeroStore){
+      tagEl.innerHTML = `<span class="status-tag warn">⚠️ Ative todas as lojas da carteira para concorrer</span>`;
+    } else if(found.total < MIN_CHIPS){
+      tagEl.innerHTML = `<span class="status-tag warn">🚀 Faltam ${MIN_CHIPS-found.total} chips para o mínimo de elegibilidade</span>`;
+    } else {
+      tagEl.innerHTML = `<span class="status-tag warn">📈 Elegível — siga subindo para o Top 5</span>`;
+    }
+
+    // gauge
+    const leader = ranking[0] ? ranking[0].total : MIN_CHIPS;
+    const maxScale = Math.max(leader, MIN_CHIPS) * 1.15 || 1;
+    const pct = Math.min(100, (found.total/maxScale)*100);
+    const threshPct = Math.min(100, (MIN_CHIPS/maxScale)*100);
+    document.getElementById('gaugeFill').style.width = pct+'%';
+    document.getElementById('gaugeRocket').style.left = pct+'%';
+    document.getElementById('gaugeThreshold').style.left = threshPct+'%';
+    document.getElementById('gaugeMax').textContent = `Líder: ${leader} chips`;
+
+    renderTable(found.nome);
+    document.getElementById('resultCard').scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+
+  document.getElementById('searchBtn').addEventListener('click', doSearch);
+  document.getElementById('searchInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
+
+  // ---------- admin modal ----------
+  const overlay = document.getElementById('overlay');
+  function openModal(){
+    overlay.classList.add('show');
+    document.getElementById('pinGate').style.display='block';
+    document.getElementById('uploadGate').style.display='none';
+    document.getElementById('pinInput').value='';
+    document.getElementById('pinMsg').textContent='';
+  }
+  function closeModal(){
+    overlay.classList.remove('show');
+    pendingParsed = null;
+    document.getElementById('previewArea').innerHTML='';
+    document.getElementById('uploadMsg').textContent='';
+    document.getElementById('confirmUpload').disabled = true;
+  }
+  document.getElementById('openAdmin').addEventListener('click', openModal);
+  document.getElementById('openAdminTop').addEventListener('click', openModal);
+  document.getElementById('openAdminFab').addEventListener('click', openModal);
+  document.getElementById('closeAdmin').addEventListener('click', closeModal);
+  document.getElementById('closeAdmin2').addEventListener('click', closeModal);
+  document.getElementById('pinCancel').addEventListener('click', closeModal);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+
+  document.getElementById('pinBtn').addEventListener('click', ()=>{
+    const val = document.getElementById('pinInput').value;
+    if(val === ADMIN_PIN){
+      document.getElementById('pinGate').style.display='none';
+      document.getElementById('uploadGate').style.display='block';
+      document.getElementById('startDateInput').value = campaignStart || '';
+    } else {
+      document.getElementById('pinMsg').textContent = 'PIN incorreto. Tente novamente.';
+    }
+  });
+
+  document.getElementById('saveSettings').addEventListener('click', async ()=>{
+    const msgEl = document.getElementById('settingsMsg');
+    const startVal = document.getElementById('startDateInput').value || null;
+    msgEl.className='modal-msg'; msgEl.textContent='Salvando...';
+    try{
+      const existing = (await loadData()) || { entries: [], updatedAt: lastUpdated };
+      const payload = { ...existing, startDate: startVal };
+      await saveData(payload);
+      campaignStart = startVal;
+      renderCountdown();
+      msgEl.className='modal-msg ok';
+      msgEl.textContent = 'Data de início salva!';
+    }catch(err){
+      msgEl.className='modal-msg err';
+      msgEl.textContent = 'Erro ao salvar. Tente novamente.';
+    }
+  });
+
+  // ---------- file parsing ----------
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  dropZone.addEventListener('click', ()=> fileInput.click());
+  dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.style.borderColor='var(--oxxo-gold)'; });
+  dropZone.addEventListener('dragleave', ()=>{ dropZone.style.borderColor=''; });
+  dropZone.addEventListener('drop', e=>{
+    e.preventDefault(); dropZone.style.borderColor='';
+    if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e=>{
+    if(e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  function findCol(headers, keywords){
+    for(const h of headers){
+      const n = normalize(h);
+      if(keywords.some(k=>n.includes(k))) return h;
+    }
+    return null;
+  }
+
+  // Finder with exact-match priority + exclusion list, to disambiguate
+  // headers from the vendas template (e.g. CONSULTOR vs NOME_MES both
+  // contain "nome"; DS_LOJA vs CNPJ_LOJA both contain "loja").
+  function findColSmart(headers, exactCandidates, fallbackKeywords, excludeKeywords){
+    excludeKeywords = excludeKeywords || [];
+    const normHeaders = headers.map(h=>({raw:h, n:normalize(h)}));
+    for(const cand of exactCandidates){
+      const hit = normHeaders.find(h=> h.n === normalize(cand));
+      if(hit) return hit.raw;
+    }
+    for(const h of normHeaders){
+      if(excludeKeywords.some(x=>h.n.includes(x))) continue;
+      if(fallbackKeywords.some(k=>h.n.includes(k))) return h.raw;
+    }
+    return null;
+  }
+
+  const MONTH_MAP = {
+    'janeiro':0,'fevereiro':1,'marco':2,'abril':3,'maio':4,'junho':5,
+    'julho':6,'agosto':7,'setembro':8,'outubro':9,'novembro':10,'dezembro':11
+  };
+  function monthIndexFromName(name){
+    const n = normalize(name);
+    return (n in MONTH_MAP) ? MONTH_MAP[n] : null;
+  }
+
+  function handleFile(file){
+    const msgEl = document.getElementById('uploadMsg');
+    msgEl.className='modal-msg'; msgEl.textContent = 'Lendo arquivo...';
+    const reader = new FileReader();
+    reader.onload = function(evt){
+      try{
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+        if(!rows.length){ throw new Error('Planilha vazia'); }
+        const headers = Object.keys(rows[0]);
+        const nomeCol = findColSmart(headers, ['consultor'], ['nome','cl','colaborador','vendedor'], ['mes']);
+        const lojaCol = findColSmart(headers, ['ds_loja'], ['loja'], ['cnpj','cd_','centro','cidade']);
+        const chipsCol = findColSmart(headers, ['volume'], ['chip','venda','qtd']);
+        const mesCol = findColSmart(headers, ['nome_mes'], ['mes']);
+        const anoCol = findColSmart(headers, ['ano'], ['ano']);
+        if(!nomeCol || !chipsCol){
+          throw new Error('Não encontrei as colunas "CONSULTOR" e "Volume". Verifique os cabeçalhos da planilha.');
+        }
+
+        // campaign period (row must fall inside [start, start+3 months) )
+        let periodStartYM = null, periodEndYM = null;
+        if(campaignStart){
+          const start = new Date(campaignStart + 'T00:00:00');
+          periodStartYM = start.getFullYear()*12 + start.getMonth();
+          periodEndYM = periodStartYM + 3; // exclusive
+        }
+
+        let skippedOutOfPeriod = 0;
+        let skippedUnknownDate = 0;
+        const byName = {};
+        rows.forEach(r=>{
+          const nome = (r[nomeCol]||'').toString().trim();
+          if(!nome) return;
+          const loja = lojaCol ? (r[lojaCol]||'').toString().trim() : '—';
+          const chips = parseFloat(r[chipsCol]) || 0;
+
+          if(mesCol && anoCol && periodStartYM !== null){
+            const mIdx = monthIndexFromName(r[mesCol]);
+            const ano = parseInt(r[anoCol], 10);
+            if(mIdx === null || !ano){
+              skippedUnknownDate++; return;
+            }
+            const rowYM = ano*12 + mIdx;
+            if(rowYM < periodStartYM || rowYM >= periodEndYM){
+              skippedOutOfPeriod++; return;
+            }
+          }
+
+          if(!byName[nome]) byName[nome] = [];
+          byName[nome].push({loja: loja || '—', chips});
+        });
+        const entries = Object.keys(byName).map(nome=>({nome, lojas: byName[nome]}));
+        if(!entries.length){
+          throw new Error('Nenhuma linha válida encontrada dentro do período da campanha. Verifique NOME_MES/ANO e a data de início definida.');
+        }
+
+        pendingParsed = entries;
+        renderPreview(entries);
+        document.getElementById('confirmUpload').disabled = false;
+        let msg = '';
+        if(skippedOutOfPeriod>0) msg += `${skippedOutOfPeriod} linha(s) fora do período da campanha foram ignoradas. `;
+        if(skippedUnknownDate>0) msg += `${skippedUnknownDate} linha(s) com mês/ano inválido foram ignoradas.`;
+        msgEl.textContent = msg;
+      }catch(err){
+        msgEl.className='modal-msg err';
+        msgEl.textContent = err.message || 'Erro ao ler o arquivo.';
+        pendingParsed = null;
+        document.getElementById('confirmUpload').disabled = true;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function renderPreview(entries){
+    const total = entries.length;
+    const rowsHtml = entries.slice(0,6).map(e=>{
+      const t = e.lojas.reduce((s,l)=>s+l.chips,0);
+      return `<tr><td>${escapeHtml(e.nome)}</td><td>${escapeHtml(e.lojas.map(l=>l.loja).join(', '))}</td><td>${t}</td></tr>`;
+    }).join('');
+    document.getElementById('previewArea').innerHTML = `
+      <div class="preview-table">
+        <table><thead><tr><th>Nome</th><th>Loja(s)</th><th>Chips</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+      </div>
+      <div class="hint">${total} CL(s) encontrados${total>6?` — mostrando os 6 primeiros`:''}</div>
+    `;
+  }
+
+  document.getElementById('confirmUpload').addEventListener('click', async ()=>{
+    if(!pendingParsed) return;
+    const msgEl = document.getElementById('uploadMsg');
+    msgEl.className='modal-msg'; msgEl.textContent = 'Salvando...';
+    try{
+      const payload = { entries: pendingParsed, updatedAt: Date.now(), startDate: campaignStart };
+      await saveData(payload);
+      applyData(payload);
+      msgEl.className='modal-msg ok';
+      msgEl.textContent = 'Dados atualizados com sucesso! Todo o time já pode consultar.';
+      setTimeout(closeModal, 1400);
+    }catch(err){
+      msgEl.className='modal-msg err';
+      msgEl.textContent = 'Erro ao salvar os dados. Tente novamente.';
+    }
+  });
+
+  function applyData(payload){
+    lastUpdated = payload.updatedAt;
+    ranking = computeRanking(payload.entries || []);
+    if(payload.startDate !== undefined) campaignStart = payload.startDate;
+    renderAll();
+  }
+
+  // ---------- init ----------
+  async function init(){
+    initStars();
+    if(JSONBIN_BIN_ID.includes('COLE_') || JSONBIN_API_KEY.includes('COLE_')){
+      const el = document.getElementById('totalHint');
+      if(el) el.textContent = '⚠️ Configuração pendente: preencha JSONBIN_BIN_ID e JSONBIN_API_KEY no código para ativar o ranking compartilhado.';
+    }
+    const existing = await loadData();
+    if(existing){
+      if(!existing.startDate){
+        existing.startDate = DEFAULT_START_DATE;
+        try{ await saveData(existing); }catch(e){ /* ignore, still show locally */ }
+      }
+      applyData(existing);
+    } else {
+      campaignStart = DEFAULT_START_DATE;
+      try{ await saveData({ entries: [], updatedAt: null, startDate: DEFAULT_START_DATE }); }catch(e){ /* ignore */ }
+      renderAll();
+    }
+  }
+  init();
+})();
+</script>
+</body>
+</html>
