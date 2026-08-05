@@ -591,7 +591,7 @@
   <div class="modal">
     <button class="close-x" id="closeAdmin">✕</button>
     <h3>Área do admin</h3>
-    <p class="desc">Importe a planilha (.csv ou .xlsx) do relatório de vendas — com as colunas <strong>CONSULTOR</strong>, <strong>DS_LOJA</strong> e <strong>Volume</strong> (e <strong>NOME_MES</strong>/<strong>ANO</strong> para filtrar pelo período da campanha). Cada linha pode ser uma loja diferente do mesmo CL — o site soma tudo automaticamente.</p>
+    <p class="desc">Importe a planilha (.csv ou .xlsx) com as colunas <strong>Nome</strong>, <strong>Loja</strong> e <strong>Chips</strong>. Cada linha pode ser uma loja diferente do mesmo CL — o site soma tudo automaticamente.</p>
 
     <div id="pinGate">
       <label>PIN de acesso</label>
@@ -664,38 +664,20 @@
     return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
   }
 
-  // ---------- storage (JSONBin.io — dado compartilhado entre todos os acessos) ----------
-  // 1. Crie uma conta grátis em https://jsonbin.io
-  // 2. Crie um bin novo com o conteúdo: {"entries":[],"updatedAt":null,"startDate":"2026-08-01"}
-  // 3. Copie o Bin ID (aparece na URL/dashboard) e cole em JSONBIN_BIN_ID abaixo.
-  // 4. Vá em "API Keys" no jsonbin.io, copie a "Master Key" (ou uma X-Access-Key com escopo
-  //    restrito a esse bin, mais seguro) e cole em JSONBIN_API_KEY abaixo.
-  const JSONBIN_BIN_ID = "6a728260f5f4af5e29ec11a2";
-  const JSONBIN_API_KEY = "$2a$10$VWz7dkETxxiCOgZ1CEnUGuuweKLv9ixmJkw10FRcJEHJyebr6xVCu";
-  const JSONBIN_BASE = "https://api.jsonbin.io/v3/b/" + JSONBIN_BIN_ID;
-
+  // ---------- storage ----------
   async function loadData(){
     try{
-      const res = await fetch(JSONBIN_BASE + "/latest", {
-        headers: { "X-Master-Key": JSONBIN_API_KEY }
-      });
-      if(!res.ok) throw new Error('load failed');
-      const json = await res.json();
-      return json.record || null;
-    }catch(e){ /* not found yet or offline */ }
+      const res = await window.storage.get('ranking-data', true);
+      if(res && res.value){
+        const parsed = JSON.parse(res.value);
+        return parsed;
+      }
+    }catch(e){ /* not found yet */ }
     return null;
   }
 
   async function saveData(payload){
-    const res = await fetch(JSONBIN_BASE, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Master-Key": JSONBIN_API_KEY
-      },
-      body: JSON.stringify(payload)
-    });
-    if(!res.ok) throw new Error('Falha ao salvar no JSONBin (verifique Bin ID / API Key).');
+    await window.storage.set('ranking-data', JSON.stringify(payload), true);
   }
 
   // ---------- ranking computation ----------
@@ -1031,32 +1013,6 @@
     return null;
   }
 
-  // Finder with exact-match priority + exclusion list, to disambiguate
-  // headers from the vendas template (e.g. CONSULTOR vs NOME_MES both
-  // contain "nome"; DS_LOJA vs CNPJ_LOJA both contain "loja").
-  function findColSmart(headers, exactCandidates, fallbackKeywords, excludeKeywords){
-    excludeKeywords = excludeKeywords || [];
-    const normHeaders = headers.map(h=>({raw:h, n:normalize(h)}));
-    for(const cand of exactCandidates){
-      const hit = normHeaders.find(h=> h.n === normalize(cand));
-      if(hit) return hit.raw;
-    }
-    for(const h of normHeaders){
-      if(excludeKeywords.some(x=>h.n.includes(x))) continue;
-      if(fallbackKeywords.some(k=>h.n.includes(k))) return h.raw;
-    }
-    return null;
-  }
-
-  const MONTH_MAP = {
-    'janeiro':0,'fevereiro':1,'marco':2,'abril':3,'maio':4,'junho':5,
-    'julho':6,'agosto':7,'setembro':8,'outubro':9,'novembro':10,'dezembro':11
-  };
-  function monthIndexFromName(name){
-    const n = normalize(name);
-    return (n in MONTH_MAP) ? MONTH_MAP[n] : null;
-  }
-
   function handleFile(file){
     const msgEl = document.getElementById('uploadMsg');
     msgEl.className='modal-msg'; msgEl.textContent = 'Lendo arquivo...';
@@ -1069,59 +1025,28 @@
         const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
         if(!rows.length){ throw new Error('Planilha vazia'); }
         const headers = Object.keys(rows[0]);
-        const nomeCol = findColSmart(headers, ['consultor'], ['nome','cl','colaborador','vendedor'], ['mes']);
-        const lojaCol = findColSmart(headers, ['ds_loja'], ['loja'], ['cnpj','cd_','centro','cidade']);
-        const chipsCol = findColSmart(headers, ['volume'], ['chip','venda','qtd']);
-        const mesCol = findColSmart(headers, ['nome_mes'], ['mes']);
-        const anoCol = findColSmart(headers, ['ano'], ['ano']);
+        const nomeCol = findCol(headers, ['nome','cl','colaborador','vendedor']);
+        const lojaCol = findCol(headers, ['loja']);
+        const chipsCol = findCol(headers, ['chip','venda','qtd']);
         if(!nomeCol || !chipsCol){
-          throw new Error('Não encontrei as colunas "CONSULTOR" e "Volume". Verifique os cabeçalhos da planilha.');
+          throw new Error('Não encontrei as colunas "Nome" e "Chips". Verifique os cabeçalhos da planilha.');
         }
-
-        // campaign period (row must fall inside [start, start+3 months) )
-        let periodStartYM = null, periodEndYM = null;
-        if(campaignStart){
-          const start = new Date(campaignStart + 'T00:00:00');
-          periodStartYM = start.getFullYear()*12 + start.getMonth();
-          periodEndYM = periodStartYM + 3; // exclusive
-        }
-
-        let skippedOutOfPeriod = 0;
-        let skippedUnknownDate = 0;
         const byName = {};
         rows.forEach(r=>{
           const nome = (r[nomeCol]||'').toString().trim();
           if(!nome) return;
           const loja = lojaCol ? (r[lojaCol]||'').toString().trim() : '—';
           const chips = parseFloat(r[chipsCol]) || 0;
-
-          if(mesCol && anoCol && periodStartYM !== null){
-            const mIdx = monthIndexFromName(r[mesCol]);
-            const ano = parseInt(r[anoCol], 10);
-            if(mIdx === null || !ano){
-              skippedUnknownDate++; return;
-            }
-            const rowYM = ano*12 + mIdx;
-            if(rowYM < periodStartYM || rowYM >= periodEndYM){
-              skippedOutOfPeriod++; return;
-            }
-          }
-
           if(!byName[nome]) byName[nome] = [];
           byName[nome].push({loja: loja || '—', chips});
         });
         const entries = Object.keys(byName).map(nome=>({nome, lojas: byName[nome]}));
-        if(!entries.length){
-          throw new Error('Nenhuma linha válida encontrada dentro do período da campanha. Verifique NOME_MES/ANO e a data de início definida.');
-        }
+        if(!entries.length) throw new Error('Nenhuma linha válida encontrada na planilha.');
 
         pendingParsed = entries;
         renderPreview(entries);
         document.getElementById('confirmUpload').disabled = false;
-        let msg = '';
-        if(skippedOutOfPeriod>0) msg += `${skippedOutOfPeriod} linha(s) fora do período da campanha foram ignoradas. `;
-        if(skippedUnknownDate>0) msg += `${skippedUnknownDate} linha(s) com mês/ano inválido foram ignoradas.`;
-        msgEl.textContent = msg;
+        msgEl.textContent = '';
       }catch(err){
         msgEl.className='modal-msg err';
         msgEl.textContent = err.message || 'Erro ao ler o arquivo.';
@@ -1173,10 +1098,6 @@
   // ---------- init ----------
   async function init(){
     initStars();
-    if(JSONBIN_BIN_ID.includes('COLE_') || JSONBIN_API_KEY.includes('COLE_')){
-      const el = document.getElementById('totalHint');
-      if(el) el.textContent = '⚠️ Configuração pendente: preencha JSONBIN_BIN_ID e JSONBIN_API_KEY no código para ativar o ranking compartilhado.';
-    }
     const existing = await loadData();
     if(existing){
       if(!existing.startDate){
